@@ -52,6 +52,7 @@ exports.read = function(req, res, next){
 };
 
 
+
 exports.add = function(req,res, next){
   if(!req.isAuthenticated()){
     req.flash('error', "You are not logged in");
@@ -101,5 +102,83 @@ exports.create = function(req, res, next){
     });
   });
 
+  workflow.emit('validate');
+};
+
+
+exports.edit = function(req, res, next){
+  req.app.db.models.Event.findById(req.params.id).exec(function(err, event) {
+    if (err) {
+      return next(err);
+    }
+    if (req.xhr) {
+      res.send(event);
+    }
+    else {
+      res.render('events/edit', { event: event });
+    }
+  });
+};
+
+exports.update = function(req, res, next){
+  var workflow = req.app.utility.workflow(req, res);
+
+  workflow.on('validate', function() {
+    if (!req.body.name) {
+      workflow.outcome.errors.push('Please enter a name.');
+      return workflow.emit('response');
+    }
+    
+    workflow.emit('updateEvent');
+  });
+
+
+  workflow.on('updateEvent', function() {
+    var fieldsToSet = {
+      username: req.user.username,
+      name: req.body.name,
+      description: req.body.description,
+      venu: req.body.venu,
+      date: req.body.date,
+      startTime: req.body.startTime,
+      endTime: req.body.endTime,
+      search: [
+        req.body.name
+      ]
+    };
+    req.app.db.models.Event.findByIdAndUpdate(req.params.id, fieldsToSet, function(err, event) {
+      if (err) {
+        return workflow.emit('exception', err);
+      }
+
+      workflow.outcome.record = event;
+      req.flash('success', "Event Updated");
+      res.location('/events/show/'+req.params.id);
+      res.redirect('/events/show/'+req.params.id);
+    });
+  });
+
+  workflow.emit('validate');
+};
+
+exports.delete = function(req, res, next){
+  
+  var workflow = req.app.utility.workflow(req, res);
+  
+  workflow.on('validate', function(){
+    workflow.emit('deleteEvent');
+  });
+  
+  workflow.on('deleteEvent', function(err){
+    req.app.db.models.Event.findByIdAndRemove(req.params.id, function(err, event){
+      if(err){
+        return workflow.emit('exception', err);
+      }
+      req.flash('success', 'Event Deleted');
+      res.location('/events');
+      res.redirect('/events');
+    });
+  });
+  
   workflow.emit('validate');
 };
